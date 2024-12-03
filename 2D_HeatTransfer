@@ -1,0 +1,53 @@
+import matplotlib.pyplot as plt
+import numpy as np
+# Adam Grendys 
+# 10/30/2024
+
+# INPUT PARAMETERS
+a = 111 # Thermal Diffusivity (mm^2/s)
+length_x = 100 # Length (mm)
+length_y = 100 # Length (mm)
+time = 100 # Time (s)
+nodes = 50 # Node Count (Resolution)
+
+# INITIALIZATION
+dx = length_x / nodes
+dy = length_y / nodes
+dt = min(dx**2/(4*a), dy**2/(4*a))
+t_nodes = int(time / dt)
+temp = np.zeros((nodes, nodes)) + 20 # Starting Temp (C)
+
+# BOUNDARY CONDITIONS
+temp[0, :] = 20 # Bottom start temp (C)
+temp[-1, :] = 20 # Top start temp (C)
+temp[:, 0] = 100 # Left End start temp (C)
+temp[:, -1] = 100 # Right End start temp (C)
+
+# Figure
+fig, axis = plt.subplots()
+pcm = axis.pcolormesh(temp, cmap=plt.cm.jet, vmin=0, vmax=100)
+plt.colorbar(pcm, ax=axis)
+
+# Simulation
+counter = 0
+
+while counter < time : 
+    new_temp = temp.copy()
+
+    for i in range(1, nodes - 1) :
+        for j in range(1, nodes - 1):
+            dd_tempx = (new_temp[i-1, j] - 2*new_temp[i, j] + new_temp[i+1, j])/dx**2
+            dd_tempy = (new_temp[i, j-1] - 2*new_temp[i, j] + new_temp[i, j+1])/dy**2
+
+            temp[i, j] = dt * a * (dd_tempx + dd_tempy) + new_temp[i, j]
+
+    counter += dt
+
+    # Graph Update
+    pcm.set_array(temp)
+    axis.set_title("Distribution at t: {:.3f} [s].".format(counter))
+    plt.pause(0.01)
+
+axis.set_xlabel("Length X (mm)")
+axis.set_ylabel("Length Y (mm)")
+plt.show

@@ -1,0 +1,108 @@
+import numpy as np
+from matplotlib import pyplot
+# Adam Grendys 
+# 11/3/2024
+
+plot_every = 10 # Plot refresh time
+
+def distance(x1, y1, x2, y2):
+    return np.sqrt((x2-x1)**2 + (y2-y1)**2)
+
+
+Nx = 200 # Nodes in X-direction
+Ny = 100 # Nodes in Y-direction
+tau = 0.63 # Kinematic Viscosity / Timescale #0.8 max
+Nt = 100000 # Time iterations
+
+# Lattice Speeds and Weights
+NL = 9
+coord_x = np.array([0, 0, 1, 1, 1, 0, -1, -1, -1])
+coord_y = np.array([0, 1, 1, 0, -1, -1, -1, 0, 1]) 
+weights = np.array([4/9, 1/9, 1/36, 1/9, 1/36, 1/9, 1/36, 1/9, 1/36]) # Derived from Navier Stokes
+
+# Initial Conditions
+F = np.ones([Ny, Nx, NL]) + 0.1 * np.random.randn(Ny, Nx, NL) # Misos Config Velocity
+F[:, :, 3] = 3 # Can Change
+
+# Obstacle Definition and Selection
+X, Y = np.meshgrid(np.arange(Nx), np.arange(Ny))
+
+obs_sel = int(input('Select Obstacle: 1 = Circle, 2 = Ellipse, 3 = Rectangle: '))
+plot_type = int(input('Select Plot Types: 1 = Speed, 2 = Curl, 3 = Both: '))
+
+if obs_sel == 1:
+    diameter = 10
+    obstacle = np.sqrt((X - Nx/4)**2 + (Y - Ny/2)**2) <= diameter
+elif obs_sel == 2:
+    a, b = 20, 10  # Radii along x and y axes
+    center_x, center_y = Nx / 4, Ny / 2
+    obstacle = (((X - center_x) / a) ** 2 + ((Y - center_y) / b) ** 2) <= 1
+elif obs_sel == 3:
+    x_start, x_end = Nx // 4 - 5, Nx // 4 + 5
+    y_start, y_end = Ny // 2 - 10, Ny // 2 + 10
+    obstacle = (X >= x_start) & (X <= x_end) & (Y >= y_start) & (Y <= y_end)
+else:
+    print("Invalid Obstacle")
+
+# Plot Initialization
+pyplot.figure(1)
+
+# Main Solver Loop
+for it in range(Nt):
+    print(it)
+
+    # Wall Absorption (Prevents Wave Bounce)
+    F[: , -1, [6, 7, 8]] = F[: , -2, [6, 7, 8]]
+    F[:, 0, [2, 3, 4]] = F[:, 1, [2, 3, 4]]
+
+    # Streaming Step
+    for i, cx, cy in zip(range(NL), coord_x, coord_y):
+        F[:, :, i] = np.roll(F[:, :, i], cx, axis=1)
+        F[:, :, i] = np.roll(F[:, :, i], cy, axis=0)
+
+    boundary_F = F[obstacle, :]
+    boundary_F = boundary_F[:, [0, 5, 6, 7, 8, 1, 2, 3, 4]]
+
+    # Fluid properties
+    rho = np.sum(F, 2)
+    vel_x = np.sum(F * coord_x, 2) / rho
+    vel_y = np.sum(F * coord_y, 2) / rho
+
+    F[obstacle, :] = boundary_F
+    vel_x[obstacle] = 0
+    vel_y[obstacle] = 0
+
+    # Collision
+    Feq = np.zeros(F.shape) # Assume Isothermal 
+    for i, cx, cy, w in zip(range(NL), coord_x, coord_y, weights):
+        Feq[:, :, i] = rho * w * (
+            1 + 3 * (cx * vel_x + cy * vel_y) + 9 * (cx*vel_x + cy*vel_y)**2 / 2 - 3 * (vel_x**2 + vel_y**2)/2
+        )
+        
+    F = F + -(1/tau) * (F-Feq)
+
+    if(it%plot_every == 0):
+
+        # Overlay the obstacle
+        if plot_type == 1 or plot_type == 3:
+            pyplot.subplot(211)
+            pyplot.title(f"Distribution at t: {it / 1000:.2f} [s].")
+            pyplot.contour(obstacle, colors='black')
+
+            speed = np.sqrt(vel_x**2 + vel_y**2)
+            pyplot.imshow(speed)
+        elif plot_type == 2 or plot_type == 3:
+            pyplot.subplot(212)
+            pyplot.contour(obstacle, colors='black')
+            
+            dfydx = vel_x[2:, 1:-1] - vel_x[0:-2, 1:-1]
+            dfxdy = vel_y[1:-1, 2:] - vel_y[1:-1, 0:-2]
+            curl = dfydx - dfxdy
+            pyplot.imshow(curl, cmap="bwr")
+            pyplot.xlabel("Nodes X")
+            pyplot.ylabel("Nodes Y")
+        else:
+            print("Invalid Plot Type")
+
+        pyplot.pause(.001)
+        pyplot.cla()
